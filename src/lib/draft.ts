@@ -7,6 +7,7 @@ const DRAFT_STORE = "drafts"
 const ACTIVE_DRAFT_ID = "active"
 
 export interface Draft {
+  noteId?: string
   title: string
   content: string
   tags: string[]

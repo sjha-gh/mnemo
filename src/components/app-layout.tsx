@@ -1,16 +1,17 @@
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom"
-import { Home, Plus, Search } from "lucide-react"
-import { Logo } from "./logo"
-import { ThemeToggle } from "./theme-toggle"
-import { cn } from "@/lib/utils"
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Home, Plus, Search } from "lucide-react";
+import { Logo } from "./logo";
+import { ThemeToggle } from "./theme-toggle";
+import { MockModeBanner } from "./mock-mode-banner";
+import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/app", label: "Notes", icon: Home },
   { to: "/search", label: "Search", icon: Search },
-]
+];
 
 export function AppLayout() {
-  const location = useLocation()
+  const location = useLocation();
   return (
     <div className="flex min-h-dvh flex-col bg-background">
       {/* Top header */}
@@ -53,7 +54,12 @@ export function AppLayout() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 pt-6 sm:pb-12" key={location.pathname}>
+      <MockModeBanner />
+
+      <main
+        className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 pt-6 sm:pb-12"
+        key={location.pathname}
+      >
         <Outlet />
       </main>
 
@@ -89,5 +95,5 @@ export function AppLayout() {
         </div>
       </nav>
     </div>
-  )
+  );
 }

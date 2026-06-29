@@ -1,16 +1,23 @@
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Plus, Search, Sparkles } from "lucide-react"
-import { useNotes } from "@/hooks/use-notes"
+import { CloudUpload, Plus, Search, Sparkles, TriangleAlert } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
+import { noteKeys, useNotes } from "@/hooks/use-notes"
 import { NoteCard } from "@/components/note-card"
 import { cn } from "@/lib/utils"
 import type { Note } from "@/lib/types"
+import { clearDraft, loadDraft, saveDraft, type Draft } from "@/lib/draft"
+import { isRecoverableDraft, syncPendingDraft } from "@/lib/pending-draft-sync"
 
 export function DashboardPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { data: notes, isLoading } = useNotes()
   const [query, setQuery] = useState("")
   const [activeTag, setActiveTag] = useState<string | null>(null)
+  const [pendingDraft, setPendingDraft] = useState<Draft | null>(null)
+  const [syncingDraft, setSyncingDraft] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   const tags = useMemo(() => {
     const map = new Map<string, number>()
@@ -36,6 +43,46 @@ export function DashboardPage() {
 
   const indexedCount = (notes ?? []).filter((n) => n.status === "indexed").length
 
+  const refreshPendingDraft = useCallback(async () => {
+    const draft = await loadDraft()
+    setPendingDraft(isRecoverableDraft(draft) ? draft : null)
+  }, [])
+
+  const syncDraft = useCallback(
+    async ({ openAfterSync = false }: { openAfterSync?: boolean } = {}) => {
+      if (!pendingDraft || syncingDraft) return
+      setSyncingDraft(true)
+      setSyncError(null)
+      try {
+        await saveDraft({ ...pendingDraft, syncStatus: "sync_pending", updatedAt: Date.now() })
+        const note = await syncPendingDraft(pendingDraft)
+        await clearDraft()
+        setPendingDraft(null)
+        await queryClient.invalidateQueries({ queryKey: noteKeys.all })
+        if (note?.id && openAfterSync) navigate(`/note/${note.id}`)
+      } catch (error) {
+        await saveDraft({ ...pendingDraft, syncStatus: "sync_failed", updatedAt: Date.now() })
+        setPendingDraft({ ...pendingDraft, syncStatus: "sync_failed", updatedAt: Date.now() })
+        setSyncError(error instanceof Error ? error.message : "Could not sync recovered draft")
+      } finally {
+        setSyncingDraft(false)
+      }
+    },
+    [navigate, pendingDraft, queryClient, syncingDraft],
+  )
+
+  useEffect(() => {
+    void refreshPendingDraft()
+  }, [refreshPendingDraft])
+
+  useEffect(() => {
+    if (!pendingDraft || syncingDraft || syncError || !navigator.onLine) return
+    const timer = window.setTimeout(() => {
+      void syncDraft()
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [pendingDraft, syncDraft, syncError, syncingDraft])
+
   return (
     <div className="flex flex-col gap-7">
       <header className="flex flex-col gap-1">
@@ -44,6 +91,16 @@ export function DashboardPage() {
           Your notebook
         </h1>
       </header>
+
+      {pendingDraft ? (
+        <RecoveredDraftCard
+          draft={pendingDraft}
+          syncing={syncingDraft}
+          error={syncError}
+          onResume={() => navigate("/new")}
+          onSync={() => void syncDraft({ openAfterSync: true })}
+        />
+      ) : null}
 
       {/* Search */}
       <form onSubmit={submitSearch} className="relative">
@@ -113,6 +170,58 @@ export function DashboardPage() {
         <Plus className="size-4" /> New
       </Link>
     </div>
+  )
+}
+
+function RecoveredDraftCard({
+  draft,
+  syncing,
+  error,
+  onResume,
+  onSync,
+}: {
+  draft: Draft
+  syncing: boolean
+  error: string | null
+  onResume: () => void
+  onSync: () => void
+}) {
+  const title = draft.title.trim() || "Untitled recovered note"
+  const preview = draft.content.replace(/[#>*_`~\-[\]()!]/g, " ").replace(/\s+/g, " ").trim()
+  return (
+    <section className="rounded-2xl border border-primary/25 bg-primary/6 p-4">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+          {error ? <TriangleAlert className="size-4" /> : <CloudUpload className="size-4" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground">
+            {syncing ? "Syncing recovered draft…" : error ? "Recovered draft needs attention" : "Recovered unsaved note"}
+          </p>
+          <p className="mt-1 truncate text-sm text-muted-foreground">{title}</p>
+          {preview ? <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{preview}</p> : null}
+          {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onResume}
+              disabled={syncing}
+              className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary disabled:opacity-60"
+            >
+              Resume editing
+            </button>
+            <button
+              type="button"
+              onClick={onSync}
+              disabled={syncing}
+              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              {syncing ? "Syncing…" : "Sync now"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 

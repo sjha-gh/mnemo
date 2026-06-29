@@ -1,15 +1,19 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
-import { awsCredentialsProvider } from "@vercel/functions/oidc"
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
+import { awsCredentialsProvider } from "@vercel/functions/oidc";
 
 function requireEnv(name: string) {
-  const value = process.env[name]
-  if (!value) throw new Error(`Missing required environment variable: ${name}`)
-  return value
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  return value;
 }
 
-const region = requireEnv("AWS_REGION")
-const roleArn = requireEnv("AWS_ROLE_ARN")
-const bucket = process.env.S3_MEDIA_BUCKET
+const region = requireEnv("AWS_REGION");
+const roleArn = requireEnv("AWS_ROLE_ARN");
+const bucket = process.env.S3_MEDIA_BUCKET;
 
 const s3 = new S3Client({
   region,
@@ -17,34 +21,34 @@ const s3 = new S3Client({
     roleArn,
     clientConfig: { region },
   }),
-}) as any
+}) as any;
 
 export function hasMediaBucket() {
-  return Boolean(bucket)
+  return Boolean(bucket);
 }
 
 export function parseDataUrl(dataUrl: string) {
-  const match = /^data:([^;,]+)?(;base64)?,(.*)$/.exec(dataUrl)
-  if (!match) throw new Error("Invalid data URL")
+  const match = /^data:([^;,]+)?(;base64)?,(.*)$/.exec(dataUrl);
+  if (!match) throw new Error("Invalid data URL");
 
-  const [, contentType = "application/octet-stream", isBase64, payload] = match
+  const [, contentType = "application/octet-stream", isBase64, payload] = match;
   const body = isBase64
     ? Buffer.from(payload, "base64")
-    : Buffer.from(decodeURIComponent(payload), "utf8")
+    : Buffer.from(decodeURIComponent(payload), "utf8");
 
-  return { body, contentType }
+  return { body, contentType };
 }
 
 export async function uploadDataUrl({
   dataUrl,
   key,
 }: {
-  dataUrl: string
-  key: string
+  dataUrl: string;
+  key: string;
 }) {
-  if (!bucket) return null
+  if (!bucket) return null;
 
-  const { body, contentType } = parseDataUrl(dataUrl)
+  const { body, contentType } = parseDataUrl(dataUrl);
 
   await s3.send(
     new PutObjectCommand({
@@ -54,18 +58,50 @@ export async function uploadDataUrl({
       ContentType: contentType,
       ServerSideEncryption: "AES256",
     }),
-  )
+  );
 
-  return key
+  return key;
 }
 
 export async function getObject(key: string) {
-  if (!bucket) throw new Error("Missing S3_MEDIA_BUCKET")
+  if (!bucket) throw new Error("Missing S3_MEDIA_BUCKET");
 
   return s3.send(
     new GetObjectCommand({
       Bucket: bucket,
       Key: key,
     }),
-  )
+  );
+}
+
+async function streamToBuffer(stream: any): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+/** Fetch an object's raw bytes + content type. Returns null if unavailable. */
+export async function getObjectBuffer(
+  key: string,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  if (!bucket) return null;
+  try {
+    const object = await getObject(key);
+    const buffer = await streamToBuffer(object.Body);
+    return {
+      buffer,
+      contentType: object.ContentType ?? "application/octet-stream",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch an object and return it as a data URL (for vision models). */
+export async function getObjectDataUrl(key: string): Promise<string | null> {
+  const result = await getObjectBuffer(key);
+  if (!result) return null;
+  return `data:${result.contentType};base64,${result.buffer.toString("base64")}`;
 }
