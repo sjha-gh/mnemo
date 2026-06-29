@@ -5,6 +5,13 @@ export interface AudioClip {
   name: string
   durationSec: number
   createdAt: string
+  mimeType?: string
+  fileSizeBytes?: number
+  s3Key?: string
+  /** local-only playback URL or uploaded object URL */
+  url?: string
+  /** local-only data URL used while syncing MVP media through JSON APIs */
+  dataUrl?: string
   /** mock transcript produced by AI indexing */
   transcript?: string
 }
@@ -13,6 +20,11 @@ export interface ImageMemory {
   id: string
   url: string
   alt: string
+  mimeType?: string
+  fileSizeBytes?: number
+  thumbnailS3Key?: string
+  originalS3Key?: string
+  originalRetained?: boolean
   /** mock AI caption */
   caption?: string
 }

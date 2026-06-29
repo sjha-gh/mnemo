@@ -6,7 +6,7 @@ import {
   saveNote,
   runAiIndexing,
   type CreateNoteInput,
-} from "@/lib/store"
+} from "@/lib/api-client"
 import type { NoteStatus } from "@/lib/types"
 
 export const noteKeys = {

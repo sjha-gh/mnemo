@@ -175,13 +175,22 @@ function AudioClipRow({ clip }: { clip: AudioClip }) {
   const [playing, setPlaying] = useState(false)
   const ref = useRef<HTMLAudioElement | null>(null)
 
+  function toggle() {
+    const audio = ref.current
+    if (!audio || !clip.url) return
+
+    if (playing) audio.pause()
+    else void audio.play()
+  }
+
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
       <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={() => setPlaying((p) => !p)}
-          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+          onClick={toggle}
+          disabled={!clip.url}
+          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary disabled:cursor-not-allowed disabled:opacity-40"
           aria-label={playing ? "Pause" : "Play"}
         >
           {playing ? <Pause className="size-4" /> : <Play className="size-4 translate-x-px" />}
@@ -190,7 +199,16 @@ function AudioClipRow({ clip }: { clip: AudioClip }) {
           <p className="truncate text-sm font-medium">{clip.name}</p>
           <p className="text-xs text-muted-foreground">{formatDuration(clip.durationSec)}</p>
         </div>
-        <audio ref={ref} className="hidden" />
+        {clip.url && (
+          <audio
+            ref={ref}
+            src={clip.url}
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onEnded={() => setPlaying(false)}
+            className="hidden"
+          />
+        )}
       </div>
       {clip.transcript && (
         <p className="rounded-lg bg-muted px-3 py-2 text-xs leading-relaxed text-muted-foreground">

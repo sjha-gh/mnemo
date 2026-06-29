@@ -4,6 +4,9 @@ export interface LocalClip {
   id: string
   name: string
   url: string
+  blob: Blob
+  mimeType: string
+  fileSizeBytes: number
   durationSec: number
   createdAt: string
 }
@@ -47,6 +50,7 @@ export function useAudioRecorder() {
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" })
         const url = URL.createObjectURL(blob)
+        const mimeType = blob.type || "audio/webm"
         const durationSec = Math.max(1, Math.round((Date.now() - startRef.current) / 1000))
         setClips((prev) => [
           ...prev,
@@ -54,6 +58,9 @@ export function useAudioRecorder() {
             id: `clip_${Date.now()}`,
             name: `Voice clip ${prev.length + 1}`,
             url,
+            blob,
+            mimeType,
+            fileSizeBytes: blob.size,
             durationSec,
             createdAt: new Date().toISOString(),
           },
@@ -95,6 +102,16 @@ export function useAudioRecorder() {
     setClips((prev) => prev.map((c) => (c.id === id ? { ...c, name } : c)))
   }, [])
 
+  const restoreClips = useCallback((nextClips: LocalClip[]) => {
+    setClips((prev) => {
+      for (const clip of prev) URL.revokeObjectURL(clip.url)
+      return nextClips.map((clip) => ({
+        ...clip,
+        url: clip.blob ? URL.createObjectURL(clip.blob) : clip.url,
+      }))
+    })
+  }, [])
+
   useEffect(() => {
     return () => {
       stopTimer()
@@ -102,5 +119,5 @@ export function useAudioRecorder() {
     }
   }, [])
 
-  return { state, clips, elapsed, start, stop, removeClip, renameClip }
+  return { state, clips, elapsed, start, stop, removeClip, renameClip, restoreClips }
 }

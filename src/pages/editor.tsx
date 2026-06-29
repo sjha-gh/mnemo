@@ -17,6 +17,15 @@ import { cn } from "@/lib/utils"
 
 type Mode = "rich" | "markdown"
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
 export function EditorPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -37,7 +46,7 @@ export function EditorPage() {
 
   const savedNoteId = useRef<string | undefined>(id)
 
-  // Hydrate from an existing note or an in-memory draft.
+  // Hydrate from an existing note or a durable local draft.
   useEffect(() => {
     if (hydrated) return
     if (isExisting) {
@@ -52,35 +61,48 @@ export function EditorPage() {
       }
       return
     }
-    const draft = loadDraft()
-    if (draft) {
-      setTitle(draft.title)
-      setMarkdown(draft.content)
-      setHtml(markdownToHtml(draft.content))
-      setTags(draft.tags)
-      setImages(draft.images)
+    let cancelled = false
+    void loadDraft().then((draft) => {
+      if (cancelled) return
+      if (draft) {
+        setTitle(draft.title)
+        setMarkdown(draft.content)
+        setHtml(markdownToHtml(draft.content))
+        setTags(draft.tags)
+        setImages(draft.images)
+        recorder.restoreClips(draft.clips)
+      }
+      setHydrated(true)
+    })
+    return () => {
+      cancelled = true
     }
-    setHydrated(true)
-  }, [existingNote, hydrated, isExisting])
+  }, [existingNote, hydrated, isExisting, recorder])
 
   // Combined clip list for display: saved clips + clips recorded this session.
   const displayClips: DisplayClip[] = useMemo(
     () => [
-      ...savedClips.map((c) => ({ id: c.id, name: c.name, durationSec: c.durationSec })),
+      ...savedClips.map((c) => ({ id: c.id, name: c.name, durationSec: c.durationSec, url: c.url })),
       ...recorder.clips.map((c) => ({ id: c.id, name: c.name, durationSec: c.durationSec, url: c.url })),
     ],
     [savedClips, recorder.clips],
   )
 
   const toAudioClips = useCallback(
-    (sessionClips: LocalClip[]): AudioClip[] => [
+    async (sessionClips: LocalClip[]): Promise<AudioClip[]> => [
       ...savedClips,
-      ...sessionClips.map((c) => ({
-        id: c.id,
-        name: c.name,
-        durationSec: c.durationSec,
-        createdAt: c.createdAt,
-      })),
+      ...(await Promise.all(
+        sessionClips.map(async (c) => ({
+          id: c.id,
+          name: c.name,
+          durationSec: c.durationSec,
+          createdAt: c.createdAt,
+          mimeType: c.mimeType,
+          fileSizeBytes: c.fileSizeBytes,
+          url: c.url,
+          dataUrl: c.blob ? await blobToDataUrl(c.blob) : undefined,
+        })),
+      )),
     ],
     [savedClips],
   )
@@ -111,18 +133,19 @@ export function EditorPage() {
 
   const persist = useCallback(async () => {
     const { title: t, markdown: md, tags: tg, images: im, sessionClips } = snapshot.current
-    if (!t.trim() && !md.trim() && im.length === 0 && toAudioClips(sessionClips).length === 0) return
+    const audioClips = await toAudioClips(sessionClips)
+    if (!t.trim() && !md.trim() && im.length === 0 && audioClips.length === 0) return
     const saved = await saveNote.mutateAsync({
       id: savedNoteId.current,
       title: t.trim() || "Untitled note",
       content: md,
       tags: tg,
-      audioClips: toAudioClips(sessionClips),
+      audioClips,
       images: im,
     })
     if (!savedNoteId.current) {
       savedNoteId.current = saved.id
-      clearDraft()
+      void clearDraft()
     }
   }, [saveNote, toAudioClips])
 
@@ -136,7 +159,15 @@ export function EditorPage() {
     if (!hydrated) return
     touch()
     if (!isExisting && !savedNoteId.current && !isEmpty) {
-      saveDraft({ title, content: markdown, tags, clips: recorder.clips, images, updatedAt: Date.now() })
+      void saveDraft({
+        title,
+        content: markdown,
+        tags,
+        clips: recorder.clips,
+        images,
+        updatedAt: Date.now(),
+        syncStatus: "local_only",
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, markdown, tags, images, recorder.clips])
