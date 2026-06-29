@@ -1,21 +1,28 @@
-import { searchNotes } from "./_lib/notes"
-import { queryParam, sendJson, sendMethodNotAllowed } from "./_lib/http"
+import { searchNotes } from "./_lib/notes";
+import {
+  queryParam,
+  sendError,
+  sendJson,
+  sendMethodNotAllowed,
+} from "./_lib/http";
+import { authenticate } from "./_lib/auth";
 
 export default async function handler(req: any, res: any) {
   try {
     if (req.method !== "GET") {
-      sendMethodNotAllowed(res, ["GET"])
-      return
+      sendMethodNotAllowed(res, ["GET"]);
+      return;
     }
 
-    const q = queryParam(req.query?.q)?.trim() ?? ""
+    const user = await authenticate(req);
+    const q = queryParam(req.query?.q)?.trim() ?? "";
     if (!q) {
-      sendJson(res, 200, [])
-      return
+      sendJson(res, 200, []);
+      return;
     }
 
-    sendJson(res, 200, await searchNotes(q))
+    sendJson(res, 200, await searchNotes(q, user.id));
   } catch (error) {
-    sendJson(res, 500, { error: error instanceof Error ? error.message : "Unknown error" })
+    sendError(res, error);
   }
 }

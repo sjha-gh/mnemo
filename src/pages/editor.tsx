@@ -51,13 +51,23 @@ export function EditorPage() {
     if (hydrated) return
     if (isExisting) {
       if (existingNote) {
-        setTitle(existingNote.title)
-        setMarkdown(existingNote.content)
-        setHtml(markdownToHtml(existingNote.content))
-        setTags(existingNote.tags)
-        setSavedClips(existingNote.audioClips)
-        setImages(existingNote.images)
-        setHydrated(true)
+        let cancelled = false
+        void loadDraft().then((draft) => {
+          if (cancelled) return
+          const matchingDraft = draft?.noteId === id ? draft : null
+          const content = matchingDraft?.content ?? existingNote.content
+          setTitle(matchingDraft?.title ?? existingNote.title)
+          setMarkdown(content)
+          setHtml(markdownToHtml(content))
+          setTags(matchingDraft?.tags ?? existingNote.tags)
+          setSavedClips(existingNote.audioClips)
+          setImages(matchingDraft?.images ?? existingNote.images)
+          if (matchingDraft) recorder.restoreClips(matchingDraft.clips)
+          setHydrated(true)
+        })
+        return () => {
+          cancelled = true
+        }
       }
       return
     }
@@ -65,6 +75,7 @@ export function EditorPage() {
     void loadDraft().then((draft) => {
       if (cancelled) return
       if (draft) {
+        savedNoteId.current = draft.noteId
         setTitle(draft.title)
         setMarkdown(draft.content)
         setHtml(markdownToHtml(draft.content))
@@ -131,6 +142,27 @@ export function EditorPage() {
   const snapshot = useRef({ title, markdown, tags, images, sessionClips: recorder.clips })
   snapshot.current = { title, markdown, tags, images, sessionClips: recorder.clips }
 
+  const saveCurrentDraft = useCallback(
+    (syncStatus: "local_only" | "sync_pending" | "synced" | "sync_failed" = "local_only") => {
+      const { title: t, markdown: md, tags: tg, images: im, sessionClips } = snapshot.current
+      const hasContent =
+        t.trim() || md.trim() || tg.length > 0 || im.length > 0 || sessionClips.length > 0 || savedClips.length > 0
+      if (!hasContent) return
+
+      void saveDraft({
+        noteId: savedNoteId.current,
+        title: t,
+        content: md,
+        tags: tg,
+        clips: sessionClips,
+        images: im,
+        updatedAt: Date.now(),
+        syncStatus,
+      })
+    },
+    [savedClips.length],
+  )
+
   const persist = useCallback(async () => {
     const { title: t, markdown: md, tags: tg, images: im, sessionClips } = snapshot.current
     const audioClips = await toAudioClips(sessionClips)
@@ -145,8 +177,8 @@ export function EditorPage() {
     })
     if (!savedNoteId.current) {
       savedNoteId.current = saved.id
-      void clearDraft()
     }
+    await clearDraft()
   }, [saveNote, toAudioClips])
 
   const { state, lastSavedAt, touch, flush } = useAutosave({
@@ -154,23 +186,28 @@ export function EditorPage() {
     enabled: hydrated && !isEmpty,
   })
 
-  // Mirror current edits into the in-memory draft (resilience for new notes).
+  // Mirror current edits into IndexedDB. This is the true abrupt-close safety net.
   useEffect(() => {
     if (!hydrated) return
     touch()
-    if (!isExisting && !savedNoteId.current && !isEmpty) {
-      void saveDraft({
-        title,
-        content: markdown,
-        tags,
-        clips: recorder.clips,
-        images,
-        updatedAt: Date.now(),
-        syncStatus: "local_only",
-      })
-    }
+    if (!isEmpty) saveCurrentDraft("local_only")
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, markdown, tags, images, recorder.clips])
+
+  useEffect(() => {
+    const markPending = () => saveCurrentDraft("sync_pending")
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") markPending()
+    }
+    window.addEventListener("pagehide", markPending)
+    window.addEventListener("beforeunload", markPending)
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      window.removeEventListener("pagehide", markPending)
+      window.removeEventListener("beforeunload", markPending)
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
+  }, [saveCurrentDraft])
 
   async function handleDone() {
     flush("exit")
