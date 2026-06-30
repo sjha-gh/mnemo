@@ -181,43 +181,115 @@ export async function noteBelongsToUser(noteId: string, userId: string) {
   return result.rowCount ? result.rowCount > 0 : false;
 }
 
+// Common words that add no search signal. Dropped so a natural-language query
+// like "the one with the mnemo logo" matches on the meaningful terms.
+const SEARCH_STOPWORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "or",
+  "of",
+  "to",
+  "in",
+  "on",
+  "for",
+  "with",
+  "that",
+  "this",
+  "these",
+  "those",
+  "is",
+  "are",
+  "was",
+  "were",
+  "it",
+  "its",
+  "i",
+  "me",
+  "my",
+  "we",
+  "our",
+  "you",
+  "your",
+  "about",
+  "one",
+  "ones",
+  "some",
+  "any",
+  "note",
+  "notes",
+  "where",
+  "what",
+  "which",
+  "show",
+  "find",
+  "search",
+]);
+
+/** Build the OR-block that checks whether a single term matches any field. */
+function termMatchBlock(param: string) {
+  return `(
+    n.title ILIKE ${param}
+    OR n.markdown_content ILIKE ${param}
+    OR n.plain_text ILIKE ${param}
+    OR COALESCE(n.ai_summary, '') ILIKE ${param}
+    OR EXISTS (
+      SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
+      WHERE nt.note_id = n.id AND t.name ILIKE ${param}
+    )
+    OR EXISTS (
+      SELECT 1 FROM audio_clips ac
+      WHERE ac.note_id = n.id AND COALESCE(ac.transcript, '') ILIKE ${param}
+    )
+    OR EXISTS (
+      SELECT 1 FROM image_assets ia
+      WHERE ia.note_id = n.id AND COALESCE(ia.ai_description, '') ILIKE ${param}
+    )
+    OR EXISTS (
+      SELECT 1 FROM note_entities ne
+      WHERE ne.note_id = n.id AND ne.value ILIKE ${param}
+    )
+  )`;
+}
+
 export async function searchNotes(q: string, userId: string) {
-  const search = `%${q.trim()}%`;
+  const trimmed = q.trim();
+  if (!trimmed) return [];
+
+  // Tokenize: split into meaningful terms so multi-word, natural-language
+  // queries match notes that contain those terms (across body, transcript,
+  // image caption, tags, entities) rather than requiring the exact phrase.
+  const terms = trimmed
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 1 && !SEARCH_STOPWORDS.has(t));
+
+  // $1 = userId. Each meaningful term must match somewhere (AND). If the query
+  // is all stopwords/punctuation, fall back to a whole-phrase match.
+  const params: unknown[] = [userId];
+  let condition: string;
+
+  if (terms.length === 0) {
+    params.push(`%${trimmed}%`);
+    condition = termMatchBlock("$2");
+  } else {
+    condition = terms
+      .map((term) => {
+        params.push(`%${term}%`);
+        return termMatchBlock(`$${params.length}`);
+      })
+      .join("\n        AND ");
+  }
+
   const result = await query<NoteRow>(
     `
       ${noteSelect}
-      WHERE
-        n.user_id = $2
-        AND (
-          n.title ILIKE $1
-          OR n.markdown_content ILIKE $1
-          OR n.plain_text ILIKE $1
-          OR COALESCE(n.ai_summary, '') ILIKE $1
-          OR EXISTS (
-            SELECT 1
-            FROM note_tags nt
-            JOIN tags t ON t.id = nt.tag_id
-            WHERE nt.note_id = n.id AND t.name ILIKE $1
-          )
-          OR EXISTS (
-            SELECT 1
-            FROM audio_clips ac
-            WHERE ac.note_id = n.id AND COALESCE(ac.transcript, '') ILIKE $1
-          )
-          OR EXISTS (
-            SELECT 1
-            FROM image_assets ia
-            WHERE ia.note_id = n.id AND COALESCE(ia.ai_description, '') ILIKE $1
-          )
-          OR EXISTS (
-            SELECT 1
-            FROM note_entities ne
-            WHERE ne.note_id = n.id AND ne.value ILIKE $1
-          )
-        )
+      WHERE n.user_id = $1
+        AND ${condition}
       ORDER BY n.updated_at DESC
     `,
-    [search, userId],
+    params,
   );
   return result.rows.map(mapNote);
 }
@@ -340,7 +412,9 @@ async function replaceImages(
         image.thumbnailS3Key ?? originalS3Key,
         originalS3Key,
         image.originalRetained ?? false,
-        image.caption ?? image.alt ?? null,
+        // Do NOT fall back to the filename/alt here — that would look like an
+        // AI description and cause processing to skip real vision captioning.
+        image.caption ?? null,
       ],
     );
   }
@@ -488,18 +562,21 @@ async function describeNoteImages(
 ): Promise<string[]> {
   const descriptions: string[] = [];
   for (const image of note.images) {
-    if (image.caption) {
-      descriptions.push(image.caption);
+    const key = image.originalS3Key ?? image.thumbnailS3Key;
+    // No bytes to look at — keep any existing caption for the search context.
+    if (!key) {
+      if (image.caption) descriptions.push(image.caption);
       continue;
     }
-    const key = image.originalS3Key ?? image.thumbnailS3Key;
-    if (!key) continue;
 
     const dataUrl = await getObjectDataUrl(key);
-    if (!dataUrl) continue;
+    const description = dataUrl ? await describeImage(dataUrl) : null;
 
-    const description = await describeImage(dataUrl);
-    if (!description) continue;
+    // Fall back to any existing caption if the vision call is unavailable.
+    if (!description) {
+      if (image.caption) descriptions.push(image.caption);
+      continue;
+    }
 
     descriptions.push(description);
     await query(
