@@ -275,7 +275,9 @@ export function EditorPage() {
       // the user on the editor screen.
       saveCurrentDraft("sync_pending");
     }
-    navigate(savedNoteId.current ? `/note/${savedNoteId.current}` : "/app");
+    navigate(savedNoteId.current ? `/note/${savedNoteId.current}` : "/app", {
+      replace: true,
+    });
   }
 
   function removeClip(clipId: string) {
