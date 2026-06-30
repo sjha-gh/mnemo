@@ -28,10 +28,23 @@ export function hasMediaBucket() {
 }
 
 export function parseDataUrl(dataUrl: string) {
-  const match = /^data:([^;,]+)?(;base64)?,(.*)$/.exec(dataUrl);
-  if (!match) throw new Error("Invalid data URL");
+  // data:[<mediatype>][;base64],<data>
+  // mediatype may carry parameters (e.g. audio/webm;codecs=opus), so we can't
+  // assume `;base64` immediately follows the type. Split on the first comma and
+  // inspect the header instead of a rigid regex.
+  if (!dataUrl.startsWith("data:")) throw new Error("Invalid data URL");
 
-  const [, contentType = "application/octet-stream", isBase64, payload] = match;
+  const comma = dataUrl.indexOf(",");
+  if (comma === -1) throw new Error("Invalid data URL");
+
+  const header = dataUrl.slice("data:".length, comma);
+  const payload = dataUrl.slice(comma + 1);
+
+  const isBase64 = /;base64$/i.test(header);
+  const contentType =
+    (isBase64 ? header.slice(0, header.length - ";base64".length) : header) ||
+    "application/octet-stream";
+
   const body = isBase64
     ? Buffer.from(payload, "base64")
     : Buffer.from(decodeURIComponent(payload), "utf8");

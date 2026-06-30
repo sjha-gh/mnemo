@@ -1,103 +1,116 @@
-"use client"
+"use client";
 
-import { ArrowLeft, FileText, Sparkles, Type } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
-import { AudioAttachments, type DisplayClip } from "@/components/editor/audio-attachments"
-import { ImageAttachments } from "@/components/editor/image-attachments"
-import { RichTextEditor } from "@/components/editor/rich-text-editor"
-import { SyncStatus } from "@/components/editor/sync-status"
-import { useAudioRecorder, type LocalClip } from "@/hooks/use-audio-recorder"
-import { useAutosave } from "@/hooks/use-autosave"
-import { useNote, useSaveNote } from "@/hooks/use-notes"
-import { clearDraft, loadDraft, saveDraft } from "@/lib/draft"
-import { htmlToMarkdown, markdownToHtml } from "@/lib/markdown"
-import type { AudioClip, ImageMemory } from "@/lib/types"
-import { cn } from "@/lib/utils"
+import { ArrowLeft, FileText, Sparkles, Type } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  AudioAttachments,
+  type DisplayClip,
+} from "@/components/editor/audio-attachments";
+import { ImageAttachments } from "@/components/editor/image-attachments";
+import { RichTextEditor } from "@/components/editor/rich-text-editor";
+import { SyncStatus } from "@/components/editor/sync-status";
+import { useAudioRecorder, type LocalClip } from "@/hooks/use-audio-recorder";
+import { useAutosave } from "@/hooks/use-autosave";
+import { useNote, useSaveNote } from "@/hooks/use-notes";
+import { clearDraft, loadDraft, saveDraft } from "@/lib/draft";
+import { htmlToMarkdown, markdownToHtml } from "@/lib/markdown";
+import type { AudioClip, ImageMemory } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-type Mode = "rich" | "markdown"
+type Mode = "rich" | "markdown";
 
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 export function EditorPage() {
-  const { id } = useParams()
-  const navigate = useNavigate()
-  const isExisting = Boolean(id)
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const isExisting = Boolean(id);
 
-  const { data: existingNote } = useNote(id)
-  const saveNote = useSaveNote()
-  const recorder = useAudioRecorder()
+  const { data: existingNote } = useNote(id);
+  const saveNote = useSaveNote();
+  const recorder = useAudioRecorder();
 
-  const [title, setTitle] = useState("")
-  const [html, setHtml] = useState("")
-  const [markdown, setMarkdown] = useState("")
-  const [mode, setMode] = useState<Mode>("rich")
-  const [tags, setTags] = useState<string[]>([])
-  const [savedClips, setSavedClips] = useState<AudioClip[]>([])
-  const [images, setImages] = useState<ImageMemory[]>([])
-  const [hydrated, setHydrated] = useState(false)
+  const [title, setTitle] = useState("");
+  const [html, setHtml] = useState("");
+  const [markdown, setMarkdown] = useState("");
+  const [mode, setMode] = useState<Mode>("rich");
+  const [tags, setTags] = useState<string[]>([]);
+  const [savedClips, setSavedClips] = useState<AudioClip[]>([]);
+  const [images, setImages] = useState<ImageMemory[]>([]);
+  const [hydrated, setHydrated] = useState(false);
 
-  const savedNoteId = useRef<string | undefined>(id)
+  const savedNoteId = useRef<string | undefined>(id);
 
   // Hydrate from an existing note or a durable local draft.
   useEffect(() => {
-    if (hydrated) return
+    if (hydrated) return;
     if (isExisting) {
       if (existingNote) {
-        let cancelled = false
+        let cancelled = false;
         void loadDraft().then((draft) => {
-          if (cancelled) return
-          const matchingDraft = draft?.noteId === id ? draft : null
-          const content = matchingDraft?.content ?? existingNote.content
-          setTitle(matchingDraft?.title ?? existingNote.title)
-          setMarkdown(content)
-          setHtml(markdownToHtml(content))
-          setTags(matchingDraft?.tags ?? existingNote.tags)
-          setSavedClips(existingNote.audioClips)
-          setImages(matchingDraft?.images ?? existingNote.images)
-          if (matchingDraft) recorder.restoreClips(matchingDraft.clips)
-          setHydrated(true)
-        })
+          if (cancelled) return;
+          const matchingDraft = draft?.noteId === id ? draft : null;
+          const content = matchingDraft?.content ?? existingNote.content;
+          setTitle(matchingDraft?.title ?? existingNote.title);
+          setMarkdown(content);
+          setHtml(markdownToHtml(content));
+          setTags(matchingDraft?.tags ?? existingNote.tags);
+          setSavedClips(existingNote.audioClips);
+          setImages(matchingDraft?.images ?? existingNote.images);
+          if (matchingDraft) recorder.restoreClips(matchingDraft.clips);
+          setHydrated(true);
+        });
         return () => {
-          cancelled = true
-        }
+          cancelled = true;
+        };
       }
-      return
+      return;
     }
-    let cancelled = false
+    let cancelled = false;
     void loadDraft().then((draft) => {
-      if (cancelled) return
+      if (cancelled) return;
       if (draft) {
-        savedNoteId.current = draft.noteId
-        setTitle(draft.title)
-        setMarkdown(draft.content)
-        setHtml(markdownToHtml(draft.content))
-        setTags(draft.tags)
-        setImages(draft.images)
-        recorder.restoreClips(draft.clips)
+        savedNoteId.current = draft.noteId;
+        setTitle(draft.title);
+        setMarkdown(draft.content);
+        setHtml(markdownToHtml(draft.content));
+        setTags(draft.tags);
+        setImages(draft.images);
+        recorder.restoreClips(draft.clips);
       }
-      setHydrated(true)
-    })
+      setHydrated(true);
+    });
     return () => {
-      cancelled = true
-    }
-  }, [existingNote, hydrated, isExisting, recorder])
+      cancelled = true;
+    };
+  }, [existingNote, hydrated, isExisting, recorder]);
 
   // Combined clip list for display: saved clips + clips recorded this session.
   const displayClips: DisplayClip[] = useMemo(
     () => [
-      ...savedClips.map((c) => ({ id: c.id, name: c.name, durationSec: c.durationSec, url: c.url })),
-      ...recorder.clips.map((c) => ({ id: c.id, name: c.name, durationSec: c.durationSec, url: c.url })),
+      ...savedClips.map((c) => ({
+        id: c.id,
+        name: c.name,
+        durationSec: c.durationSec,
+        url: c.url,
+      })),
+      ...recorder.clips.map((c) => ({
+        id: c.id,
+        name: c.name,
+        durationSec: c.durationSec,
+        url: c.url,
+      })),
     ],
     [savedClips, recorder.clips],
-  )
+  );
 
   const toAudioClips = useCallback(
     async (sessionClips: LocalClip[]): Promise<AudioClip[]> => [
@@ -116,38 +129,70 @@ export function EditorPage() {
       )),
     ],
     [savedClips],
-  )
+  );
 
   const isEmpty =
-    !title.trim() && !markdown.trim() && displayClips.length === 0 && images.length === 0
+    !title.trim() &&
+    !markdown.trim() &&
+    displayClips.length === 0 &&
+    images.length === 0;
 
   const handleHtmlChange = useCallback((next: string) => {
-    setHtml(next)
-    setMarkdown(htmlToMarkdown(next))
-  }, [])
+    setHtml(next);
+    setMarkdown(htmlToMarkdown(next));
+  }, []);
 
   const handleMarkdownChange = useCallback((next: string) => {
-    setMarkdown(next)
-    setHtml(markdownToHtml(next))
-  }, [])
+    setMarkdown(next);
+    setHtml(markdownToHtml(next));
+  }, []);
 
   function switchMode(next: Mode) {
-    if (next === mode) return
-    if (next === "markdown") setMarkdown(htmlToMarkdown(html))
-    else setHtml(markdownToHtml(markdown))
-    setMode(next)
+    if (next === mode) return;
+    if (next === "markdown") setMarkdown(htmlToMarkdown(html));
+    else setHtml(markdownToHtml(markdown));
+    setMode(next);
   }
 
   // Keep a snapshot of current values for the autosave callback.
-  const snapshot = useRef({ title, markdown, tags, images, sessionClips: recorder.clips })
-  snapshot.current = { title, markdown, tags, images, sessionClips: recorder.clips }
+  const snapshot = useRef({
+    title,
+    markdown,
+    tags,
+    images,
+    sessionClips: recorder.clips,
+  });
+  snapshot.current = {
+    title,
+    markdown,
+    tags,
+    images,
+    sessionClips: recorder.clips,
+  };
 
   const saveCurrentDraft = useCallback(
-    (syncStatus: "local_only" | "sync_pending" | "synced" | "sync_failed" = "local_only") => {
-      const { title: t, markdown: md, tags: tg, images: im, sessionClips } = snapshot.current
+    (
+      syncStatus:
+        | "local_only"
+        | "sync_pending"
+        | "synced"
+        | "sync_failed" = "local_only",
+    ) => {
+      const {
+        title: t,
+        markdown: md,
+        tags: tg,
+        images: im,
+        sessionClips,
+      } = snapshot.current;
       const hasContent =
-        t.trim() || md.trim() || tg.length > 0 || im.length > 0 || sessionClips.length > 0 || savedClips.length > 0
-      if (!hasContent) return
+        t.trim() ||
+        md.trim() ||
+        tg.length > 0 ||
+        im.length > 0 ||
+        sessionClips.length > 0 ||
+        savedClips.length > 0;
+      if (!hasContent) return;
 
       void saveDraft({
         noteId: savedNoteId.current,
@@ -158,15 +203,22 @@ export function EditorPage() {
         images: im,
         updatedAt: Date.now(),
         syncStatus,
-      })
+      });
     },
     [savedClips.length],
-  )
+  );
 
   const persist = useCallback(async () => {
-    const { title: t, markdown: md, tags: tg, images: im, sessionClips } = snapshot.current
-    const audioClips = await toAudioClips(sessionClips)
-    if (!t.trim() && !md.trim() && im.length === 0 && audioClips.length === 0) return
+    const {
+      title: t,
+      markdown: md,
+      tags: tg,
+      images: im,
+      sessionClips,
+    } = snapshot.current;
+    const audioClips = await toAudioClips(sessionClips);
+    if (!t.trim() && !md.trim() && im.length === 0 && audioClips.length === 0)
+      return;
     const saved = await saveNote.mutateAsync({
       id: savedNoteId.current,
       title: t.trim() || "Untitled note",
@@ -174,59 +226,70 @@ export function EditorPage() {
       tags: tg,
       audioClips,
       images: im,
-    })
+    });
     if (!savedNoteId.current) {
-      savedNoteId.current = saved.id
+      savedNoteId.current = saved.id;
     }
-    await clearDraft()
-  }, [saveNote, toAudioClips])
+    await clearDraft();
+  }, [saveNote, toAudioClips]);
 
   const { state, lastSavedAt, touch, flush } = useAutosave({
-    onSave: () => void persist(),
+    onSave: () => {
+      // Never let an autosave failure surface as an unhandled rejection. The
+      // draft is already in IndexedDB; mark it pending so it can sync later.
+      persist().catch(() => saveCurrentDraft("sync_pending"));
+    },
     enabled: hydrated && !isEmpty,
-  })
+  });
 
   // Mirror current edits into IndexedDB. This is the true abrupt-close safety net.
   useEffect(() => {
-    if (!hydrated) return
-    touch()
-    if (!isEmpty) saveCurrentDraft("local_only")
+    if (!hydrated) return;
+    touch();
+    if (!isEmpty) saveCurrentDraft("local_only");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, markdown, tags, images, recorder.clips])
+  }, [title, markdown, tags, images, recorder.clips]);
 
   useEffect(() => {
-    const markPending = () => saveCurrentDraft("sync_pending")
+    const markPending = () => saveCurrentDraft("sync_pending");
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") markPending()
-    }
-    window.addEventListener("pagehide", markPending)
-    window.addEventListener("beforeunload", markPending)
-    document.addEventListener("visibilitychange", onVisibility)
+      if (document.visibilityState === "hidden") markPending();
+    };
+    window.addEventListener("pagehide", markPending);
+    window.addEventListener("beforeunload", markPending);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      window.removeEventListener("pagehide", markPending)
-      window.removeEventListener("beforeunload", markPending)
-      document.removeEventListener("visibilitychange", onVisibility)
-    }
-  }, [saveCurrentDraft])
+      window.removeEventListener("pagehide", markPending);
+      window.removeEventListener("beforeunload", markPending);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [saveCurrentDraft]);
 
   async function handleDone() {
-    flush("exit")
-    await persist()
-    navigate(savedNoteId.current ? `/note/${savedNoteId.current}` : "/app")
+    flush("exit");
+    try {
+      await persist();
+    } catch {
+      // The backend save failed (e.g. API down). The draft is already durable
+      // in IndexedDB, so mark it pending for later recovery/sync and never trap
+      // the user on the editor screen.
+      saveCurrentDraft("sync_pending");
+    }
+    navigate(savedNoteId.current ? `/note/${savedNoteId.current}` : "/app");
   }
 
   function removeClip(clipId: string) {
     if (savedClips.some((c) => c.id === clipId)) {
-      setSavedClips((prev) => prev.filter((c) => c.id !== clipId))
+      setSavedClips((prev) => prev.filter((c) => c.id !== clipId));
     } else {
-      recorder.removeClip(clipId)
+      recorder.removeClip(clipId);
     }
   }
 
   const wordCount = useMemo(() => {
-    const text = markdown.replace(/[#>*_`[\]()\-!]/g, " ")
-    return text.trim().split(/\s+/).filter(Boolean).length
-  }, [markdown])
+    const text = markdown.replace(/[#>*_`[\]()\-!]/g, " ");
+    return text.trim().split(/\s+/).filter(Boolean).length;
+  }, [markdown]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
@@ -248,7 +311,9 @@ export function EditorPage() {
               onClick={() => switchMode("rich")}
               className={cn(
                 "flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                mode === "rich" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+                mode === "rich"
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
               aria-pressed={mode === "rich"}
               title="Rich text editor"
@@ -261,7 +326,9 @@ export function EditorPage() {
               onClick={() => switchMode("markdown")}
               className={cn(
                 "flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                mode === "markdown" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+                mode === "markdown"
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
               aria-pressed={mode === "markdown"}
               title="Markdown editor"
@@ -311,18 +378,26 @@ export function EditorPage() {
             clips={displayClips}
             isRecording={recorder.state === "recording"}
             elapsed={recorder.elapsed}
-            onToggleRecord={() => (recorder.state === "recording" ? recorder.stop() : void recorder.start())}
+            onToggleRecord={() =>
+              recorder.state === "recording"
+                ? recorder.stop()
+                : void recorder.start()
+            }
             onRemove={removeClip}
           />
           <ImageAttachments
             images={images}
             onAdd={(image) => setImages((prev) => [...prev, image])}
-            onRemove={(imageId) => setImages((prev) => prev.filter((i) => i.id !== imageId))}
+            onRemove={(imageId) =>
+              setImages((prev) => prev.filter((i) => i.id !== imageId))
+            }
           />
         </div>
 
-        <p className="mt-8 text-xs text-muted-foreground/60">{wordCount} words</p>
+        <p className="mt-8 text-xs text-muted-foreground/60">
+          {wordCount} words
+        </p>
       </main>
     </div>
-  )
+  );
 }
