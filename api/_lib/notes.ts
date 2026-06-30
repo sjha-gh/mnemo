@@ -5,9 +5,14 @@ import type {
   Note,
   NoteStatus,
 } from "../../src/lib/types";
-import { query, withTransaction } from "./db";
-import { getObjectBuffer, getObjectDataUrl, uploadDataUrl } from "./s3";
-import { analyzeNote, describeImage, isAiEnabled, transcribeAudio } from "./ai";
+import { query, withTransaction } from "./db.js";
+import { getObjectBuffer, getObjectDataUrl, uploadDataUrl } from "./s3.js";
+import {
+  analyzeNote,
+  describeImage,
+  isAiEnabled,
+  transcribeAudio,
+} from "./ai.js";
 
 type NoteRow = {
   id: string;

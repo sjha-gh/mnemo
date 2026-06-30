@@ -1,11 +1,11 @@
-import { searchNotes } from "./_lib/notes";
+import { searchNotes } from "./_lib/notes.js";
 import {
   queryParam,
   sendError,
   sendJson,
   sendMethodNotAllowed,
-} from "./_lib/http";
-import { authenticate } from "./_lib/auth";
+} from "./_lib/http.js";
+import { authenticate } from "./_lib/auth.js";
 
 export default async function handler(req: any, res: any) {
   try {

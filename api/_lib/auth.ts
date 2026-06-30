@@ -1,4 +1,4 @@
-import { query } from "./db";
+import { query } from "./db.js";
 
 /**
  * Milestone 6: single-user hackathon ownership guard.
