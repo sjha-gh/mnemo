@@ -12,7 +12,10 @@ function requireEnv(name: string) {
 }
 
 const region = requireEnv("AWS_REGION");
-const roleArn = requireEnv("AWS_ROLE_ARN");
+// The Vercel/Aurora integration role (AWS_ROLE_ARN) is DB-scoped and capped by
+// a permissions boundary that excludes S3. Use a dedicated S3 role when
+// provided (S3_ROLE_ARN); otherwise fall back to the DB role.
+const roleArn = process.env.S3_ROLE_ARN || requireEnv("AWS_ROLE_ARN");
 const bucket = process.env.S3_MEDIA_BUCKET;
 
 const s3 = new S3Client({
