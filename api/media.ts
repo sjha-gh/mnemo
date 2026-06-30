@@ -1,12 +1,12 @@
-import { getObject } from "./_lib/s3";
+import { getObject } from "./_lib/s3.js";
 import {
   queryParam,
   sendError,
   sendJson,
   sendMethodNotAllowed,
-} from "./_lib/http";
-import { authenticate } from "./_lib/auth";
-import { noteBelongsToUser } from "./_lib/notes";
+} from "./_lib/http.js";
+import { authenticate } from "./_lib/auth.js";
+import { noteBelongsToUser } from "./_lib/notes.js";
 
 async function streamToBuffer(stream: any) {
   const chunks: Buffer[] = [];

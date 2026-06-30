@@ -1,11 +1,11 @@
-import { getNote } from "../../_lib/notes";
+import { getNote } from "../../_lib/notes.js";
 import {
   queryParam,
   sendError,
   sendJson,
   sendMethodNotAllowed,
-} from "../../_lib/http";
-import { authenticate } from "../../_lib/auth";
+} from "../../_lib/http.js";
+import { authenticate } from "../../_lib/auth.js";
 
 export default async function handler(req: any, res: any) {
   const id = queryParam(req.query?.id);
