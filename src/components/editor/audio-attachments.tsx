@@ -1,33 +1,46 @@
-"use client"
+"use client";
 
-import { Mic, Square, Trash2, Play, Pause } from "lucide-react"
-import { useRef, useState } from "react"
-import { cn } from "@/lib/utils"
+import { Mic, Square, Trash2, Play, Pause } from "lucide-react";
+import { useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 
 export interface DisplayClip {
-  id: string
-  name: string
-  durationSec: number
+  id: string;
+  name: string;
+  durationSec: number;
   /** present only for clips recorded this session */
-  url?: string
+  url?: string;
 }
 
 function formatDuration(seconds: number) {
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m}:${s.toString().padStart(2, "0")}`
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function ClipRow({ clip, onRemove }: { clip: DisplayClip; onRemove: (id: string) => void }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const [playing, setPlaying] = useState(false)
+function ClipRow({
+  clip,
+  onRemove,
+}: {
+  clip: DisplayClip;
+  onRemove: (id: string) => void;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
 
   function toggle() {
-    const el = audioRef.current
-    if (!el) return
-    if (playing) el.pause()
-    else void el.play()
+    const el = audioRef.current;
+    if (!el) return;
+    if (playing) el.pause();
+    else void el.play();
   }
+
+  const total = clip.durationSec;
+  const timeLabel =
+    playing || currentTime > 0
+      ? `${formatDuration(currentTime)} / ${formatDuration(total)}`
+      : formatDuration(total);
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5">
@@ -41,11 +54,19 @@ function ClipRow({ clip, onRemove }: { clip: DisplayClip; onRemove: (id: string)
         )}
         aria-label={playing ? "Pause clip" : "Play clip"}
       >
-        {playing ? <Pause className="size-4" /> : <Play className="size-4 translate-x-px" />}
+        {playing ? (
+          <Pause className="size-4" />
+        ) : (
+          <Play className="size-4 translate-x-px" />
+        )}
       </button>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">{clip.name}</p>
-        <p className="text-xs text-muted-foreground">Voice memo · {formatDuration(clip.durationSec)}</p>
+        <p className="truncate text-sm font-medium text-foreground">
+          {clip.name}
+        </p>
+        <p className="text-xs text-muted-foreground tabular-nums">
+          Voice memo · {timeLabel}
+        </p>
       </div>
       {clip.url && (
         <audio
@@ -53,7 +74,11 @@ function ClipRow({ clip, onRemove }: { clip: DisplayClip; onRemove: (id: string)
           src={clip.url}
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
-          onEnded={() => setPlaying(false)}
+          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+          onEnded={() => {
+            setPlaying(false);
+            setCurrentTime(0);
+          }}
           className="hidden"
         />
       )}
@@ -66,7 +91,7 @@ function ClipRow({ clip, onRemove }: { clip: DisplayClip; onRemove: (id: string)
         <Trash2 className="size-4" />
       </button>
     </div>
-  )
+  );
 }
 
 export function AudioAttachments({
@@ -76,11 +101,11 @@ export function AudioAttachments({
   onToggleRecord,
   onRemove,
 }: {
-  clips: DisplayClip[]
-  isRecording: boolean
-  elapsed: number
-  onToggleRecord: () => void
-  onRemove: (id: string) => void
+  clips: DisplayClip[];
+  isRecording: boolean;
+  elapsed: number;
+  onToggleRecord: () => void;
+  onRemove: (id: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -116,7 +141,9 @@ export function AudioAttachments({
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-destructive opacity-60" />
             <span className="relative inline-flex size-2.5 rounded-full bg-destructive" />
           </span>
-          <span className="text-sm text-foreground">Recording… {formatDuration(elapsed)}</span>
+          <span className="text-sm text-foreground">
+            Recording… {formatDuration(elapsed)}
+          </span>
         </div>
       )}
 
@@ -128,5 +155,5 @@ export function AudioAttachments({
         </div>
       )}
     </div>
-  )
+  );
 }

@@ -202,6 +202,7 @@ export function NoteDetailPage() {
 
 function AudioClipRow({ clip }: { clip: AudioClip }) {
   const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
   const ref = useRef<HTMLAudioElement | null>(null);
 
   function toggle() {
@@ -211,6 +212,12 @@ function AudioClipRow({ clip }: { clip: AudioClip }) {
     if (playing) audio.pause();
     else void audio.play();
   }
+
+  const total = clip.durationSec;
+  const timeLabel =
+    playing || currentTime > 0
+      ? `${formatDuration(currentTime)} / ${formatDuration(total)}`
+      : formatDuration(total);
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
@@ -230,8 +237,8 @@ function AudioClipRow({ clip }: { clip: AudioClip }) {
         </button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{clip.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {formatDuration(clip.durationSec)}
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {timeLabel}
           </p>
         </div>
         {clip.url && (
@@ -240,7 +247,11 @@ function AudioClipRow({ clip }: { clip: AudioClip }) {
             src={clip.url}
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
-            onEnded={() => setPlaying(false)}
+            onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+            onEnded={() => {
+              setPlaying(false);
+              setCurrentTime(0);
+            }}
             className="hidden"
           />
         )}
